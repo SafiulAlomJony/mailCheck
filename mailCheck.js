@@ -6,7 +6,7 @@ function delay(time) {
     setTimeout(resolve, time);
   });
 }
-const mailCheck = async (res, emails, ua) => {
+const mailCheck = async (res, email, ua) => {
   const browser = await puppeteer.launch({
     args: [
       `--disable-setuid-sandbox`,
@@ -25,27 +25,21 @@ const mailCheck = async (res, emails, ua) => {
     },
     headless: "new",
   });
-  const page = await browser.newPage();
-  await page.setUserAgent(ua);
-
-  const navigationPromise = page.waitForNavigation();
-
-  await page.goto("https://accounts.google.com/");
-
-  await navigationPromise;
-
-  let msg = "{}";
-  msg = JSON.parse(msg);
-
-  for (const email of emails) {
-    console.log("Email:" + email);
+  try {
+    const page = await browser.newPage();
+    await page.setUserAgent(ua);
+    const navigationPromise = page.waitForNavigation();
+    await page.goto("https://accounts.google.com/");
+    await navigationPromise;
+    let msg = "{}";
+    msg = JSON.parse(msg);
     await page.waitForSelector('input[type="email"]');
-    console.log("clear input value");
     await page.$eval('input[type="email"]', (input) => (input.value = ""));
     await page.click('input[type="email"]');
+    console.log("Email:" + email);
     await page.type('input[type="email"]', email);
-
     const [button] = await page.$x("//span[contains(., 'Next')]");
+    console.log("Clicked on Next button");
 
     if (button) {
       await Promise.all([navigationPromise, button.click()]);
@@ -67,7 +61,13 @@ const mailCheck = async (res, emails, ua) => {
       console.log(page.url());
       res.send(msg);
       await browser.close();
-    } catch (error) {}
+    } catch (error) {
+      console.log(error);
+      await browser.close();
+      res.send(error);
+    }
+  } catch (e) {
+    console.log(e);
   }
 };
 
