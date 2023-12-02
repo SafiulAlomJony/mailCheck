@@ -1,13 +1,10 @@
 const puppeteer = require("puppeteer-extra");
+
+// add stealth plugin and use defaults (all evasion techniques)
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 puppeteer.use(StealthPlugin());
 require("dotenv").config();
 
-function delay(time) {
-  return new Promise(function (resolve) {
-    setTimeout(resolve, time);
-  });
-}
 const mailCheck = async (res, email, ua) => {
   const browser = await puppeteer.launch({
     args: [
@@ -30,47 +27,49 @@ const mailCheck = async (res, email, ua) => {
 
   try {
     const page = await browser.newPage();
-    await page.setUserAgent(ua);
+    if (ua) {
+      await page.setUserAgent(ua);
+    }
+
+    const url =
+      "https://accounts.google.com/v3/signin/identifier?continue=https://myaccount.google.com?service=accountsettings&flowName=GlifWebSignIn";
     const navigationPromise = page.waitForNavigation();
-    await page.goto("https://accounts.google.com/");
+    await page.goto(url);
     await navigationPromise;
-    let msg = "{}";
-    msg = JSON.parse(msg);
     await page.waitForSelector('input[type="email"]');
+    // Clear the existing value in the email input field
     await page.$eval('input[type="email"]', (input) => (input.value = ""));
     await page.click('input[type="email"]');
-    console.log("Email:" + email);
     await page.type('input[type="email"]', email);
     const [button] = await page.$x("//span[contains(., 'Next')]");
-    console.log("Clicked on Next button");
-
     if (button) {
+      // Click the button
       await Promise.all([navigationPromise, button.click()]);
     }
 
-    try {
+    if (page.url().includes("/identifier?")) {
+      console.log("Account Not Exits");
+    } else if (page.url().includes("/rejected?")) {
+      console.log("Account Disabled");
+    } else {
+      console.log(page.url());
+      console.log("wait for selector");
       await page.waitForSelector('[aria-label*="@gmail.com"]', {
         visible: true,
-        timeout: 10000,
+        timeout: 3000,
       });
-      // Check if the URL contains a specific string
-      if (page.url().includes("challenge")) {
-        msg[email] = "verify";
-      } else if (page.url().includes("rejected")) {
-        msg[email] = "disabled";
-      } else {
-        msg[email] = "not exists";
-      }
-      console.log(page.url());
-      res.send(msg);
-      await browser.close();
-    } catch (error) {
-      console.log(error);
-      await browser.close();
-      res.send(error);
+      console.log("selector found");
+      await page.click('[aria-label*="@gmail.com"]');
+      console.log("selector clicked");
     }
+    await page.waitForTimeout(5000);
+    console.log(page.url());
+    res.send({ url: page.url() });
   } catch (e) {
-    console.log(e);
+    let result = `{"error":${JSON.stringify(e)},"body":""}`;
+    res.send(JSON.parse(result));
+  } finally {
+    await browser.close();
   }
 };
 

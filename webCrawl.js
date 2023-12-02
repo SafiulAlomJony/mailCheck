@@ -27,7 +27,7 @@ const webCrawl = async (res, email, ua) => {
     const page = await browser.newPage();
     await page.setUserAgent(ua);
     const navigationPromise = page.waitForNavigation();
-    const url = "https://accounts.google.com/";
+    const url = "https://accounts.google.com/v3/signin/identifier?continue=https://myaccount.google.com?service=accountsettings&flowName=GlifWebSignIn";
     await page.goto(url);
     await navigationPromise;
     await page.waitForSelector('input[type="email"]');
@@ -41,25 +41,30 @@ const webCrawl = async (res, email, ua) => {
       await Promise.all([navigationPromise, button.click()]);
     }
 
-    if (page.url().includes("/identifier?")) {
-      console.log("Account Not Exits");
-    } else if (page.url().includes("/rejected?")) {
-      console.log("Account Disabled");
-    } else {
-      console.log(page.url());
-      console.log("wait for selector");
+    try {
       await page.waitForSelector('[aria-label*="@gmail.com"]', {
         visible: true,
-        timeout: 3000,
+        timeout: 10000,
       });
-      console.log("selector found");
-      await page.click('[aria-label*="@gmail.com"]');
-      console.log("selector clicked");
+    } catch (e) {
+      console.log(e);
     }
-    await page.waitForTimeout(5000);
+
+    let msg = "{}";
+    msg = JSON.parse(msg);
+
+     if (page.url().includes("challenge")) {
+        msg[email] = "verify";
+      } else if (page.url().includes("rejected")) {
+        msg[email] = "disabled";
+      } else {
+        msg[email] = "not exists";
+      }
+
     console.log(page.url());
-    res.send({ url: page.url() });
+    res.send(msg);
   } catch (e) {
+    console.log(e);
     let result = `{"error":${JSON.stringify(e)},"body":""}`;
     res.send(JSON.parse(result));
   } finally {
